@@ -211,7 +211,7 @@ class FeedForward(nn.Module):
         ffn_dim_multiplier: Optional[float],
     ):
         """
-        注释来源于llama2代码
+        注释来源于llama2代码; hidden_size 就是config文件中的 intermediate_size
         Initialize the FeedForward module.
 
         Args:
