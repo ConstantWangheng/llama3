@@ -198,7 +198,6 @@ class Attention(nn.Module):
         # score * v 的结果再经过一个输出层，映射到hidden_size相同维度；
         
         output = output.transpose(1, 2).contiguous().view(bsz, seqlen, -1)
-
         
         return self.wo(output)
 
@@ -211,6 +210,22 @@ class FeedForward(nn.Module):
         multiple_of: int,
         ffn_dim_multiplier: Optional[float],
     ):
+        """
+        注释来源于llama2代码
+        Initialize the FeedForward module.
+
+        Args:
+            dim (int): Input dimension.
+            hidden_dim (int): Hidden dimension of the feedforward layer.
+            multiple_of (int): Value to ensure hidden dimension is a multiple of this value.
+            ffn_dim_multiplier (float, optional): Custom multiplier for hidden dimension. Defaults to None.
+
+        Attributes:
+            w1 (ColumnParallelLinear): Linear transformation for the first layer.
+            w2 (RowParallelLinear): Linear transformation for the second layer.
+            w3 (ColumnParallelLinear): Linear transformation for the third layer.
+
+        """
         super().__init__()
         hidden_dim = int(2 * hidden_dim / 3)
         # custom dim factor multiplier
@@ -229,7 +244,10 @@ class FeedForward(nn.Module):
         )
 
     def forward(self, x):
+        # F.silu(self.w1(x)) swish非线性函数 x * sigmoid(x) ;
+        # 3个映射矩阵；两层网络;
         return self.w2(F.silu(self.w1(x)) * self.w3(x))
+        
 
 
 class TransformerBlock(nn.Module):
@@ -256,7 +274,11 @@ class TransformerBlock(nn.Module):
         freqs_cis: torch.Tensor,
         mask: Optional[torch.Tensor],
     ):
+        # attention层之后，有残差连接；
         h = x + self.attention(self.attention_norm(x), start_pos, freqs_cis, mask)
+        
+        # 线性层之后，有残差连接；
+        # feed_forward之后，输出的维度和输入保持不变；
         out = h + self.feed_forward(self.ffn_norm(h))
         return out
 
