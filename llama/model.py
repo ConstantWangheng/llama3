@@ -339,5 +339,6 @@ class Transformer(nn.Module):
         for layer in self.layers:
             h = layer(h, start_pos, freqs_cis, mask)
         h = self.norm(h)
+        # 经过n_layer个attention层之后，再经过输出层，每个token位置的向量映射到词典维度大小；
         output = self.output(h).float()
         return output
