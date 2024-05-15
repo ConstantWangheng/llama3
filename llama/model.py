@@ -96,7 +96,8 @@ class Attention(nn.Module):
         self.n_local_kv_heads = self.n_kv_heads // model_parallel_size
         self.n_rep = self.n_local_heads // self.n_local_kv_heads
         self.head_dim = args.dim // args.n_heads
-
+        
+        # 仅线性映射，无bias和非线性层
         self.wq = ColumnParallelLinear(
             args.dim,
             args.n_heads * self.head_dim,
@@ -104,6 +105,7 @@ class Attention(nn.Module):
             gather_output=False,
             init_method=lambda x: x,
         )
+        # 仅线性映射，无bias和非线性层
         self.wk = ColumnParallelLinear(
             args.dim,
             self.n_kv_heads * self.head_dim,
@@ -111,6 +113,7 @@ class Attention(nn.Module):
             gather_output=False,
             init_method=lambda x: x,
         )
+        # 仅线性映射，无bias和非线性层
         self.wv = ColumnParallelLinear(
             args.dim,
             self.n_kv_heads * self.head_dim,
@@ -118,6 +121,9 @@ class Attention(nn.Module):
             gather_output=False,
             init_method=lambda x: x,
         )
+        
+        # 把经过n_head个q、k、v向量得到的当前位置的embedding；
+        # 通过一个线性层映射到hidden_size维度的向量，作为attention之后最后的向量结果；
         self.wo = RowParallelLinear(
             args.n_heads * self.head_dim,
             args.dim,
@@ -180,13 +186,20 @@ class Attention(nn.Module):
         keys = keys.transpose(1, 2)  # (bs, n_local_heads, cache_len + seqlen, head_dim)
         values = values.transpose(
             1, 2
-        )  # (bs, n_local_heads, cache_len + seqlen, head_dim)
+        )  
+        # (bs, n_local_heads, cache_len + seqlen, head_dim)
         scores = torch.matmul(xq, keys.transpose(2, 3)) / math.sqrt(self.head_dim)
+        # q、k内积，并除以对应维度的开方；
+        
         if mask is not None:
             scores = scores + mask  # (bs, n_local_heads, seqlen, cache_len + seqlen)
         scores = F.softmax(scores.float(), dim=-1).type_as(xq)
         output = torch.matmul(scores, values)  # (bs, n_local_heads, seqlen, head_dim)
+        # score * v 的结果再经过一个输出层，映射到hidden_size相同维度；
+        
         output = output.transpose(1, 2).contiguous().view(bsz, seqlen, -1)
+
+        
         return self.wo(output)
 
 
@@ -249,25 +262,31 @@ class TransformerBlock(nn.Module):
 
 
 class Transformer(nn.Module):
+    # llama3 的模型结构层
     def __init__(self, params: ModelArgs):
         super().__init__()
         self.params = params
         self.vocab_size = params.vocab_size
-        self.n_layers = params.n_layers
+        self.n_layers = params.n_layers  # attention 层的数量
 
+        # vocab embed层定义
         self.tok_embeddings = VocabParallelEmbedding(
             params.vocab_size, params.dim, init_method=lambda x: x
         )
 
+        # attention层
         self.layers = torch.nn.ModuleList()
         for layer_id in range(params.n_layers):
             self.layers.append(TransformerBlock(layer_id, params))
-
+        
+        # layer normalization 
         self.norm = RMSNorm(params.dim, eps=params.norm_eps)
+        # output 层
         self.output = ColumnParallelLinear(
             params.dim, params.vocab_size, bias=False, init_method=lambda x: x
         )
-
+        
+        # 旋转位置编码
         self.freqs_cis = precompute_freqs_cis(
             params.dim // params.n_heads,
             params.max_seq_len * 2,
