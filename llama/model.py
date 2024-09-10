@@ -174,6 +174,7 @@ class Attention(nn.Module):
         keys = self.cache_k[:bsz, : start_pos + seqlen]
         values = self.cache_v[:bsz, : start_pos + seqlen]
 
+        # 当k/v heads数量小于 n_heads，就是使用 GQA 或者 MQA；
         # repeat k/v heads if n_kv_heads < n_heads
         keys = repeat_kv(
             keys, self.n_rep
@@ -198,7 +199,7 @@ class Attention(nn.Module):
         # score * v 的结果再经过一个输出层，映射到hidden_size相同维度；
         
         output = output.transpose(1, 2).contiguous().view(bsz, seqlen, -1)
-        
+        # wo 矩阵的作用是，调整向量维度，由 head_dim 转为 hidden_dim 
         return self.wo(output)
 
 
@@ -339,6 +340,7 @@ class Transformer(nn.Module):
         for layer in self.layers:
             h = layer(h, start_pos, freqs_cis, mask)
         h = self.norm(h)
+        
         # 经过n_layer个attention层之后，再经过输出层，每个token位置的向量映射到词典维度大小；
         output = self.output(h).float()
         return output
