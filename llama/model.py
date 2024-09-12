@@ -43,6 +43,7 @@ class RMSNorm(torch.nn.Module):
 
     def forward(self, x):
         output = self._norm(x.float()).type_as(x)
+        # RMSNorm归一化，是没有用均值；在变换之后，也没有加上bias；
         return output * self.weight
 
 
@@ -199,7 +200,8 @@ class Attention(nn.Module):
         # score * v 的结果再经过一个输出层，映射到hidden_size相同维度；
         
         output = output.transpose(1, 2).contiguous().view(bsz, seqlen, -1)
-        # wo 矩阵的作用是，调整向量维度，由 head_dim 转为 hidden_dim 
+        # wo 矩阵的作用是，调整向量维度，由 head_dim 转为 hidden_dim;
+        # wo 是将multi-head的结果，整合到一起;
         return self.wo(output)
 
 
