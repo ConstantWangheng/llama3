@@ -189,19 +189,22 @@ class Attention(nn.Module):
         values = values.transpose(
             1, 2
         )  
+
+        # socres = softmax(Q*K/sqrt(head_dim))
         # (bs, n_local_heads, cache_len + seqlen, head_dim)
         scores = torch.matmul(xq, keys.transpose(2, 3)) / math.sqrt(self.head_dim)
-        # q、k内积，并除以对应维度的开方；
-        
+        # q、k内积，并除以对应维度head_dim的开方，这个是为了减小方差，e指数次方过大，导致softmax之后，退化成max函数；
         if mask is not None:
             scores = scores + mask  # (bs, n_local_heads, seqlen, cache_len + seqlen)
         scores = F.softmax(scores.float(), dim=-1).type_as(xq)
+
+        # output = score * v 的结果再经过一个输出层，映射到hidden_size相同维度；变成了 [head_size * n, head_size * n]
         output = torch.matmul(scores, values)  # (bs, n_local_heads, seqlen, head_dim)
-        # score * v 的结果再经过一个输出层，映射到hidden_size相同维度；
-        
+
         output = output.transpose(1, 2).contiguous().view(bsz, seqlen, -1)
         # wo 矩阵的作用是，调整向量维度，由 head_dim 转为 hidden_dim;
         # wo 是将multi-head的结果，整合到一起;
+        # output = output * W_o； W_o的形状为 [head_size * n, hidden_size]
         return self.wo(output)
 
 
